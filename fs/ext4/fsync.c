@@ -34,6 +34,7 @@
 #include "ext4_jbd2.h"
 
 #include <trace/events/ext4.h>
+#include <trace/events/wb_tracer.h>
 
 /*
  * If we're not journaling and this is a just-created file, we have to
@@ -94,6 +95,24 @@ static int ext4_fsync_nojournal(struct file *file, loff_t start, loff_t end,
 	return ret;
 }
 
+#ifdef CONFIG_WB_TRACER
+static int ext4_fsync_nojournal_traced(struct file *file, loff_t start,
+				       loff_t end, int datasync,
+				       bool *needs_barrier, wb_tracer_id_t id)
+{
+	struct inode *inode = file->f_inode;
+	int ret;
+
+	ret = generic_buffers_fsync_noflush_traced(file, start, end, datasync, id);
+	if (!ret)
+		ret = ext4_sync_parent(inode);
+	if (test_opt(inode->i_sb, BARRIER))
+		*needs_barrier = true;
+
+	return ret;
+}
+#endif
+
 static int ext4_fsync_journal(struct inode *inode, bool datasync,
 			     bool *needs_barrier)
 {
@@ -139,6 +158,13 @@ int ext4_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 
 	trace_ext4_sync_file_enter(file, datasync);
 
+#ifdef CONFIG_WB_TRACER
+	wb_tracer_id_t id = wb_tracer_next_id();
+	__trace_wb_tracer_sync_start(id, WB_TRACER_TYPE_DATA,
+				     WB_TRACER_REASON_SYNC, file, datasync,
+				     start, end);
+#endif
+
 	if (sb_rdonly(inode->i_sb)) {
 		/* Make sure that we read updated s_ext4_flags value */
 		smp_rmb();
@@ -148,14 +174,26 @@ int ext4_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 	}
 
 	if (!EXT4_SB(inode->i_sb)->s_journal) {
+#ifdef CONFIG_WB_TRACER
+		ret = ext4_fsync_nojournal_traced(file, start, end, datasync,
+						  &needs_barrier, id);
+#else
 		ret = ext4_fsync_nojournal(file, start, end, datasync,
 					   &needs_barrier);
+#endif
 		if (needs_barrier)
 			goto issue_flush;
 		goto out;
 	}
 
+#ifdef CONFIG_WB_TRACER
+	ret = file_write_and_wait_range_traced(file, start, end, id,
+					       WB_TRACER_TYPE_DATA,
+					       WB_TRACER_REASON_SYNC);
+#else
 	ret = file_write_and_wait_range(file, start, end);
+#endif
+
 	if (ret)
 		goto out;
 
@@ -177,5 +215,8 @@ out:
 	if (ret == 0)
 		ret = err;
 	trace_ext4_sync_file_exit(inode, ret);
+#ifdef CONFIG_WB_TRACER
+	trace_wb_tracer_sync_exit(id, ret);
+#endif
 	return ret;
 }

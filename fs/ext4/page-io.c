@@ -30,6 +30,8 @@
 #include "xattr.h"
 #include "acl.h"
 
+#include <trace/events/wb_tracer.h>
+
 static struct kmem_cache *io_end_cachep;
 static struct kmem_cache *io_end_vec_cachep;
 
@@ -365,6 +367,11 @@ static void ext4_end_bio(struct bio *bio)
 		ext4_finish_bio(bio);
 		bio_put(bio);
 	}
+
+#ifdef CONFIG_WB_TRACER
+	if (io_end->flag & EXT4_IO_END_SYNC_ALL)
+		trace_wb_tracer_sync_bio_complete(bio);
+#endif
 }
 
 void ext4_io_submit(struct ext4_io_submit *io)
@@ -372,8 +379,13 @@ void ext4_io_submit(struct ext4_io_submit *io)
 	struct bio *bio = io->io_bio;
 
 	if (bio) {
-		if (io->io_wbc->sync_mode == WB_SYNC_ALL)
+		if (io->io_wbc->sync_mode == WB_SYNC_ALL) {
 			io->io_bio->bi_opf |= REQ_SYNC;
+#ifdef CONFIG_WB_TRACER
+			trace_wb_tracer_sync_bio_submit(
+				io->io_wbc->wb_tracer_id, bio);
+#endif
+		}
 		submit_bio(io->io_bio);
 	}
 	io->io_bio = NULL;
@@ -401,10 +413,13 @@ static void io_submit_init_bio(struct ext4_io_submit *io,
 	bio->bi_iter.bi_sector = bh->b_blocknr * (bh->b_size >> 9);
 	bio->bi_end_io = ext4_end_bio;
 	bio->bi_private = ext4_get_io_end(io->io_end);
+	if (io->io_wbc->sync_mode == WB_SYNC_ALL)
+		io->io_end->flag |= EXT4_IO_END_SYNC_ALL;
 	io->io_bio = bio;
 	io->io_next_block = bh->b_blocknr;
 	wbc_init_bio(io->io_wbc, bio);
 }
+
 
 static void io_submit_add_bh(struct ext4_io_submit *io,
 			     struct inode *inode,
@@ -421,9 +436,40 @@ submit_and_retry:
 		io_submit_init_bio(io, bh);
 	if (!bio_add_folio(io->io_bio, io_folio, bh->b_size, bh_offset(bh)))
 		goto submit_and_retry;
+#ifdef CONFIG_WB_TRACER
+	if (io->io_wbc->sync_mode == WB_SYNC_ALL)
+		trace_wb_tracer_sync_bio_add_folio(io->io_wbc->wb_tracer_id, io->io_bio, folio, bh);
+#endif
 	wbc_account_cgroup_owner(io->io_wbc, &folio->page, bh->b_size);
 	io->io_next_block++;
 }
+
+#ifdef CONFIG_WB_TRACER
+static void io_submit_add_bh_traced(struct ext4_io_submit *io,
+			     struct inode *inode,
+			     struct folio *folio,
+			     struct folio *io_folio,
+			     struct buffer_head *bh,
+			     loff_t *start,
+			     loff_t *end)
+{
+	if (io->io_bio && (bh->b_blocknr != io->io_next_block ||
+			   !fscrypt_mergeable_bio_bh(io->io_bio, bh))) {
+submit_and_retry:
+		ext4_io_submit(io);
+	}
+	if (io->io_bio == NULL)
+		io_submit_init_bio(io, bh);
+	if (!bio_add_folio(io->io_bio, io_folio, bh->b_size, bh_offset(bh)))
+		goto submit_and_retry;
+	if (io->io_wbc->sync_mode == WB_SYNC_ALL)
+		trace_wb_tracer_sync_bio_add_folio(io->io_wbc->wb_tracer_id,
+						   io->io_bio, folio, bh);
+	wbc_account_cgroup_owner(io->io_wbc, &folio->page, bh->b_size);
+	io->io_next_block++;
+}
+#endif
+
 
 int ext4_bio_write_folio(struct ext4_io_submit *io, struct folio *folio,
 		size_t len)

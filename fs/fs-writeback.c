@@ -2849,3 +2849,12 @@ int sync_inode_metadata(struct inode *inode, int wait)
 	return writeback_single_inode(inode, &wbc);
 }
 EXPORT_SYMBOL(sync_inode_metadata);
+
+#ifdef CONFIG_WB_TRACER
+atomic64_t wb_tracer_id = ATOMIC64_INIT(0);
+
+s64 wb_tracer_next_id(void)
+{
+	return atomic64_fetch_inc_relaxed(&wb_tracer_id);
+}
+#endif

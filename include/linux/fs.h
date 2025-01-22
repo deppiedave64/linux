@@ -2842,6 +2842,25 @@ extern int __must_check file_check_and_advance_wb_err(struct file *file);
 extern int __must_check file_write_and_wait_range(struct file *file,
 						loff_t start, loff_t end);
 
+#ifdef CONFIG_WB_TRACER
+typedef enum {
+	WB_TRACER_TYPE_DATA,
+} wb_tracer_type_t;
+
+typedef enum {
+	WB_TRACER_REASON_SYNC,
+} wb_tracer_reason_t;
+
+typedef s64 wb_tracer_id_t;
+
+wb_tracer_id_t wb_tracer_next_id(void);
+
+int file_write_and_wait_range_traced(struct file *file, loff_t lstart,
+				     loff_t lend, wb_tracer_id_t id,
+				     wb_tracer_type_t type,
+				     wb_tracer_reason_t reason);
+#endif
+
 static inline int file_write_and_wait(struct file *file)
 {
 	return file_write_and_wait_range(file, 0, LLONG_MAX);

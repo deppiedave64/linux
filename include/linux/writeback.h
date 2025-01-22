@@ -99,6 +99,11 @@ struct writeback_control {
 	size_t wb_lcand_bytes;		/* bytes written by last candidate */
 	size_t wb_tcand_bytes;		/* bytes written by this candidate */
 #endif
+#ifdef CONFIG_WB_TRACER
+	wb_tracer_id_t wb_tracer_id;
+	wb_tracer_type_t wb_tracer_type;
+	wb_tracer_reason_t wb_tracer_reason;
+#endif
 };
 
 static inline blk_opf_t wbc_to_write_flags(struct writeback_control *wbc)

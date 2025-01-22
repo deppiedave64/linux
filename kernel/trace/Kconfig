@@ -188,6 +188,21 @@ menuconfig FTRACE
 
 if FTRACE
 
+menuconfig WB_TRACER
+	bool "Write-back tracing support"
+	depends on TRACING
+	depends on 64BIT
+	default y
+
+if WB_TRACER
+
+config WB_TRACER_KPTR_RESTRICT
+	bool "Hash kernel pointers in write-back tracer traces"
+	default y
+
+endif
+
+
 config BOOTTIME_TRACING
 	bool "Boot-time Tracing support"
 	depends on TRACING

@@ -209,6 +209,11 @@ void end_buffer_write_sync(struct buffer_head *bh, int uptodate);
 void mark_buffer_dirty_inode(struct buffer_head *bh, struct inode *inode);
 int generic_buffers_fsync_noflush(struct file *file, loff_t start, loff_t end,
 				  bool datasync);
+#ifdef CONFIG_WB_TRACER
+int generic_buffers_fsync_noflush_traced(struct file *file, loff_t start,
+					 loff_t end, bool datasync,
+					 wb_tracer_id_t id);
+#endif
 int generic_buffers_fsync(struct file *file, loff_t start, loff_t end,
 			  bool datasync);
 void clean_bdev_aliases(struct block_device *bdev, sector_t block,

@@ -55,6 +55,12 @@ int filemap_write_and_wait_range(struct address_space *mapping,
 		loff_t lstart, loff_t lend);
 int __filemap_fdatawrite_range(struct address_space *mapping,
 		loff_t start, loff_t end, int sync_mode);
+#ifdef CONFIG_WB_TRACER
+int __filemap_fdatawrite_range_traced(struct address_space *mapping,
+				      loff_t start, loff_t end, int sync_mode,
+				      wb_tracer_id_t id, wb_tracer_type_t type,
+				      wb_tracer_reason_t reason);
+#endif
 int filemap_fdatawrite_range(struct address_space *mapping,
 		loff_t start, loff_t end);
 int filemap_check_errors(struct address_space *mapping);
