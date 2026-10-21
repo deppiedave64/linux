@@ -80,6 +80,10 @@ KBUILD_CFLAGS += $(call cc-option,-Wenum-conversion)
 KBUILD_CFLAGS += -Wextra
 KBUILD_CFLAGS += -Wunused
 
+ifdef CONFIG_WB_TRACER
+KBUILD_CFLAGS +=-Wno-error=unused-function
+endif
+
 #
 # W=1 - warnings which may be relevant and do not occur too often
 #
