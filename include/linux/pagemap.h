@@ -56,6 +56,11 @@ int filemap_write_and_wait_range(struct address_space *mapping,
 		loff_t lstart, loff_t lend);
 int filemap_fdatawrite_range(struct address_space *mapping,
 		loff_t start, loff_t end);
+#ifdef CONFIG_WB_TRACER
+int filemap_fdatawrite_range_traced(struct address_space *mapping,
+		loff_t start, loff_t end, wb_tracer_id_t id, wb_tracer_type_t type,
+		wb_tracer_reason_t reason);
+#endif
 int filemap_check_errors(struct address_space *mapping);
 void __filemap_set_wb_err(struct address_space *mapping, int err);
 int kiocb_write_and_wait(struct kiocb *iocb, size_t count);

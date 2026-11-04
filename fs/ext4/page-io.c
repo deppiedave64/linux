@@ -30,6 +30,8 @@
 #include "xattr.h"
 #include "acl.h"
 
+#include <trace/events/wb_tracer.h>
+
 static struct kmem_cache *io_end_cachep;
 static struct kmem_cache *io_end_vec_cachep;
 
@@ -392,6 +394,11 @@ static void ext4_end_bio(struct bio *bio)
 		ext4_finish_bio(bio);
 		bio_put(bio);
 	}
+
+#ifdef CONFIG_WB_TRACER
+	if (io_end->flag & EXT4_IO_END_SYNC_ALL)
+		trace_wb_tracer_sync_bio_complete(bio);
+#endif
 }
 
 void ext4_io_submit(struct ext4_io_submit *io)
@@ -399,8 +406,12 @@ void ext4_io_submit(struct ext4_io_submit *io)
 	struct bio *bio = io->io_bio;
 
 	if (bio) {
-		if (io->io_wbc->sync_mode == WB_SYNC_ALL)
+		if (io->io_wbc->sync_mode == WB_SYNC_ALL) {
 			io->io_bio->bi_opf |= REQ_SYNC;
+#ifdef CONFIG_WB_TRACER
+			trace_wb_tracer_sync_bio_submit(io->io_wbc->wb_tracer_id, bio);
+#endif
+		}
 		blk_crypto_submit_bio(io->io_bio);
 	}
 	io->io_bio = NULL;
@@ -432,6 +443,8 @@ static void io_submit_init_bio(struct ext4_io_submit *io,
 	bio->bi_end_io = ext4_end_bio;
 	bio->bi_private = ext4_get_io_end(io->io_end);
 	bio->bi_write_hint = inode->i_write_hint;
+	if (io->io_wbc->sync_mode == WB_SYNC_ALL)
+		io->io_end->flag |= EXT4_IO_END_SYNC_ALL;
 	io->io_bio = bio;
 	io->io_next_block = bh->b_blocknr;
 	wbc_init_bio(io->io_wbc, bio);
@@ -464,6 +477,10 @@ submit_and_retry:
 		io_submit_init_bio(io, inode, folio, bh);
 	if (!bio_add_folio(io->io_bio, io_folio, bh->b_size, bh_offset(bh)))
 		goto submit_and_retry;
+#ifdef CONFIG_WB_TRACER
+	if (io->io_wbc->sync_mode == WB_SYNC_ALL)
+		trace_wb_tracer_sync_bio_add_folio(io->io_wbc->wb_tracer_id, io->io_bio, folio, bh);
+#endif
 	wbc_account_cgroup_owner(io->io_wbc, folio, bh->b_size);
 	io->io_next_block++;
 }

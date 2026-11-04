@@ -673,6 +673,41 @@ out:
 }
 EXPORT_SYMBOL(mmb_fsync_noflush);
 
+#ifdef CONFIG_WB_TRACER
+int mmb_fsync_noflush_traced(struct file *file,
+		struct mapping_metadata_bhs *mmb, loff_t start, loff_t end,
+		bool datasync, wb_tracer_id_t id)
+{
+	struct inode *inode = file->f_mapping->host;
+	int err;
+	int ret = 0;
+
+	err = file_write_and_wait_range_traced(file, start, end, id,
+		WB_TRACER_TYPE_DATA, WB_TRACER_REASON_SYNC);
+	if (err)
+		return err;
+
+	if (mmb)
+		ret = mmb_sync(mmb);
+	if (!(inode_state_read_once(inode) & I_DIRTY_ALL))
+		goto out;
+	if (datasync && !(inode_state_read_once(inode) & I_DIRTY_DATASYNC))
+		goto out;
+
+	err = sync_inode_metadata(inode, 1);
+	if (ret == 0)
+		ret = err;
+
+out:
+	/* check and advance again to catch errors after syncing out buffers */
+	err = file_check_and_advance_wb_err(file);
+	if (ret == 0)
+		ret = err;
+	return ret;
+}
+EXPORT_SYMBOL(mmb_fsync_noflush_traced);
+#endif
+
 /**
  * mmb_fsync - fsync implementation for simple filesystems with metadata
  * 	       buffers list

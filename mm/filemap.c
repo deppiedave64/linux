@@ -392,6 +392,37 @@ static int filemap_writeback(struct address_space *mapping, loff_t start,
 	return ret;
 }
 
+#ifdef CONFIG_WB_TRACER
+static int filemap_writeback_traced(struct address_space *mapping,
+		loff_t start, loff_t end, enum writeback_sync_modes sync_mode,
+		long *nr_to_write, wb_tracer_id_t id, wb_tracer_type_t type,
+		wb_tracer_reason_t reason)
+{
+	struct writeback_control wbc = {
+		.sync_mode	= sync_mode,
+		.nr_to_write	= nr_to_write ? *nr_to_write : LONG_MAX,
+		.range_start	= start,
+		.range_end	= end,
+		.wb_tracer_id = id,
+		.wb_tracer_type = type,
+		.wb_tracer_reason = reason,
+	};
+	int ret;
+
+	if (!mapping_can_writeback(mapping) ||
+	    !mapping_tagged(mapping, PAGECACHE_TAG_DIRTY))
+		return 0;
+
+	wbc_attach_fdatawrite_inode(&wbc, mapping->host);
+	ret = do_writepages(mapping, &wbc);
+	wbc_detach_inode(&wbc);
+
+	if (!ret && nr_to_write)
+		*nr_to_write = wbc.nr_to_write;
+	return ret;
+}
+#endif
+
 /**
  * filemap_fdatawrite_range - start writeback on mapping dirty pages in range
  * @mapping:	address space structure to write
@@ -412,6 +443,17 @@ int filemap_fdatawrite_range(struct address_space *mapping, loff_t start,
 	return filemap_writeback(mapping, start, end, WB_SYNC_ALL, NULL);
 }
 EXPORT_SYMBOL(filemap_fdatawrite_range);
+
+#ifdef CONFIG_WB_TRACER
+int filemap_fdatawrite_range_traced(struct address_space *mapping,
+		loff_t start, loff_t end, wb_tracer_id_t id, wb_tracer_type_t type,
+		wb_tracer_reason_t reason)
+{
+	return filemap_writeback_traced(mapping, start, end, WB_SYNC_ALL, NULL, id,
+		type, reason);
+}
+EXPORT_SYMBOL(filemap_fdatawrite_range_traced);
+#endif
 
 int filemap_fdatawrite(struct address_space *mapping)
 {
@@ -794,6 +836,32 @@ int file_write_and_wait_range(struct file *file, loff_t lstart, loff_t lend)
 	return err;
 }
 EXPORT_SYMBOL(file_write_and_wait_range);
+
+#ifdef CONFIG_WB_TRACER
+int file_write_and_wait_range_traced(struct file *file, loff_t lstart,
+		loff_t lend, wb_tracer_id_t id, wb_tracer_type_t type,
+		wb_tracer_reason_t reason)
+{
+	int err = 0, err2;
+	struct address_space *mapping = file->f_mapping;
+
+	if (lend < lstart)
+		return 0;
+
+	if (mapping_needs_writeback(mapping)) {
+		err = filemap_fdatawrite_range_traced(mapping, lstart, lend, id, type,
+			reason);
+		/* See comment of filemap_write_and_wait() */
+		if (err != -EIO)
+			__filemap_fdatawait_range(mapping, lstart, lend);
+	}
+	err2 = file_check_and_advance_wb_err(file);
+	if (!err)
+		err = err2;
+	return err;
+}
+EXPORT_SYMBOL(file_write_and_wait_range_traced);
+#endif
 
 /**
  * replace_page_cache_folio - replace a pagecache folio with a new one
