@@ -3,6 +3,7 @@
  * Copyright (c) 2000-2005 Silicon Graphics, Inc.
  * All Rights Reserved.
  */
+#include "linux/fs.h"
 #include "xfs_platform.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
@@ -37,6 +38,8 @@
 #include <linux/fadvise.h>
 #include <linux/mount.h>
 #include <linux/filelock.h>
+
+#include <trace/events/wb_tracer.h>
 
 static const struct vm_operations_struct xfs_file_vm_ops;
 
@@ -135,7 +138,19 @@ xfs_file_fsync(
 
 	trace_xfs_file_fsync(ip);
 
+#ifdef CONFIG_WB_TRACER
+	wb_tracer_id_t id = wb_tracer_next_id();
+	__trace_wb_tracer_sync_start(id, WB_TRACER_TYPE_DATA,
+				     WB_TRACER_REASON_SYNC, file, datasync,
+				     start, end);
+#endif
+
+#ifdef CONFIG_WB_TRACER
+	error = file_write_and_wait_range_traced(file, start, end, id,
+		WB_TRACER_TYPE_DATA, WB_TRACER_REASON_SYNC);
+#else
 	error = file_write_and_wait_range(file, start, end);
+#endif
 	if (error)
 		return error;
 
@@ -178,6 +193,10 @@ xfs_file_fsync(
 		if (err2 && !error)
 			error = err2;
 	}
+
+#ifdef CONFIG_WB_TRACER
+	trace_wb_tracer_sync_exit(id, error);
+#endif
 
 	return error;
 }
