@@ -3088,4 +3088,5 @@ s64 wb_tracer_next_id(void)
 {
 	return atomic64_fetch_inc_relaxed(&wb_tracer_id);
 }
+EXPORT_SYMBOL_GPL(wb_tracer_next_id);
 #endif
