@@ -479,7 +479,8 @@ submit_and_retry:
 		goto submit_and_retry;
 #ifdef CONFIG_WB_TRACER
 	if (io->io_wbc->sync_mode == WB_SYNC_ALL)
-		trace_wb_tracer_sync_bio_add_folio(io->io_wbc->wb_tracer_id, io->io_bio, folio, bh);
+		trace_wb_tracer_sync_bio_add_folio(io->io_wbc->wb_tracer_id, io->io_bio,
+		folio_pos(folio) + bh_offset(bh), bh->b_size);
 #endif
 	wbc_account_cgroup_owner(io->io_wbc, folio, bh->b_size);
 	io->io_next_block++;

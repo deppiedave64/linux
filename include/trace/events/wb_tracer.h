@@ -12,6 +12,7 @@
 #include <linux/string.h>
 #include <linux/limits.h>
 
+#include "linux/types.h"
 
 #ifdef CONFIG_WB_TRACER
 
@@ -141,11 +142,11 @@ TRACE_EVENT(wb_tracer_sync_bio_add_folio,
 	TP_PROTO(
 		wb_tracer_id_t id,
 		struct bio *bio,
-		struct folio *folio,
-		struct buffer_head *bh
+		loff_t start,
+		loff_t len
 	),
 
-	TP_ARGS(id, bio, folio, bh),
+	TP_ARGS(id, bio, start, len),
 
 	TP_STRUCT__entry(
 		__field(wb_tracer_id_t,	id)
@@ -157,8 +158,8 @@ TRACE_EVENT(wb_tracer_sync_bio_add_folio,
 	TP_fast_assign(
 		__entry->id 	= id;
 		__entry->bio	= WB_TRACER_EXPORT_KPTR(bio);
-		__entry->start 	= ((folio_pos(folio)) + bh_offset(bh));
-		__entry->len	= bh->b_size;
+		__entry->start 	= start;
+		__entry->len	= len;
 	),
 
 	TP_printk("id %lld, bio %p, start %lld, len %lld",
