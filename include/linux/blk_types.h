@@ -284,6 +284,10 @@ struct bio {
 	atomic_t		__bi_cnt;	/* pin count */
 
 	struct bio_set		*bi_pool;
+
+#ifdef CONFIG_WB_TRACER
+	bool 			wb_tracer_traced;
+#endif
 };
 
 #define BIO_RESET_BYTES		offsetof(struct bio, bi_max_vecs)

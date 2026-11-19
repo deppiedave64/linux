@@ -152,10 +152,12 @@ xfs_file_fsync(
 	error = file_write_and_wait_range(file, start, end);
 #endif
 	if (error)
-		return error;
+		goto end;
 
-	if (xfs_is_shutdown(mp))
-		return -EIO;
+	if (xfs_is_shutdown(mp)) {
+		error = -EIO;
+		goto end;
+	}
 
 	xfs_iflags_clear(ip, XFS_ITRUNCATED);
 
@@ -194,6 +196,7 @@ xfs_file_fsync(
 			error = err2;
 	}
 
+end:
 #ifdef CONFIG_WB_TRACER
 	trace_wb_tracer_sync_exit(id, error);
 #endif

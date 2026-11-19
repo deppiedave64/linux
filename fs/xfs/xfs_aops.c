@@ -4,6 +4,7 @@
  * Copyright (c) 2016-2025 Christoph Hellwig.
  * All Rights Reserved.
  */
+#include "linux/blk_types.h"
 #include "xfs_platform.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -23,6 +24,8 @@
 #include "xfs_zone_alloc.h"
 #include "xfs_rtgroup.h"
 #include <linux/bio-integrity.h>
+
+#include <trace/events/wb_tracer.h>
 
 struct xfs_writepage_ctx {
 	struct iomap_writepage_ctx ctx;
@@ -231,6 +234,11 @@ xfs_end_bio(
 	struct xfs_inode	*ip = XFS_I(ioend->io_inode);
 	struct xfs_mount	*mp = ip->i_mount;
 	unsigned long		flags;
+
+#ifdef CONFIG_WB_TRACER
+	if (bio->wb_tracer_traced)
+		trace_wb_tracer_sync_bio_complete(bio);
+#endif
 
 	/*
 	 * For Appends record the actually written block number and set the

@@ -8,8 +8,12 @@
 #include <linux/pagemap.h>
 #include <linux/writeback.h>
 #include <linux/fserror.h>
+#include "linux/blk_types.h"
+#include "linux/fs.h"
 #include "internal.h"
 #include "trace.h"
+
+#include <trace/events/wb_tracer.h>
 
 struct bio_set iomap_ioend_bioset;
 EXPORT_SYMBOL_GPL(iomap_ioend_bioset);
@@ -117,6 +121,10 @@ static void iomap_fail_ioend_buffered(struct iomap_ioend *ioend)
 
 static void ioend_writeback_end_bio(struct bio *bio)
 {
+#ifdef CONFIG_WB_TRACER
+	if (bio->wb_tracer_traced)
+		trace_wb_tracer_sync_bio_complete(bio);
+#endif
 	struct iomap_ioend *ioend = iomap_ioend_from_bio(bio);
 
 	ioend->io_error = blk_status_to_errno(bio->bi_status);
@@ -144,6 +152,12 @@ int iomap_ioend_writeback_submit(struct iomap_writepage_ctx *wpc, int error)
 		error = -EIO;
 
 	if (error) {
+#ifdef CONFIG_WB_TRACER
+		/* Clear traced flag on the error path to avoid bio_complete events without matching
+		 * bio_submit events.
+		 */
+		ioend->io_bio.wb_tracer_traced = false;
+#endif
 		ioend->io_bio.bi_status = errno_to_blk_status(error);
 		bio_endio(&ioend->io_bio);
 		return error;
@@ -151,6 +165,10 @@ int iomap_ioend_writeback_submit(struct iomap_writepage_ctx *wpc, int error)
 
 	if (wpc->iomap.flags & IOMAP_F_INTEGRITY)
 		fs_bio_integrity_generate(&ioend->io_bio);
+#ifdef CONFIG_WB_TRACER
+	if (ioend->io_bio.wb_tracer_traced && wpc->wbc->sync_mode == WB_SYNC_ALL)
+		trace_wb_tracer_sync_bio_submit(wpc->wbc->wb_tracer_id, &ioend->io_bio);
+#endif
 	submit_bio(&ioend->io_bio);
 	return 0;
 }
@@ -168,6 +186,10 @@ static struct iomap_ioend *iomap_alloc_ioend(struct iomap_writepage_ctx *wpc,
 	bio->bi_write_hint = wpc->inode->i_write_hint;
 	wbc_init_bio(wpc->wbc, bio);
 	wpc->nr_folios = 0;
+#ifdef CONFIG_WB_TRACER
+	if (wpc->wbc->wb_tracer_reason == WB_TRACER_REASON_SYNC)
+		bio->wb_tracer_traced = true;
+#endif
 	return iomap_init_ioend(wpc->inode, bio, pos, ioend_flags);
 }
 
@@ -256,6 +278,11 @@ new_ioend:
 
 	if (!bio_add_folio(&ioend->io_bio, folio, map_len, poff))
 		goto new_ioend;
+#ifdef CONFIG_WB_TRACER
+	if (ioend->io_bio.wb_tracer_traced && wpc->wbc->sync_mode == WB_SYNC_ALL)
+		trace_wb_tracer_sync_bio_add_folio(wpc->wbc->wb_tracer_id,
+			&ioend->io_bio, folio_pos(folio) + poff, map_len);
+#endif
 
 	/*
 	 * Clamp io_offset and io_size to the incore EOF so that ondisk
@@ -495,6 +522,9 @@ struct iomap_ioend *iomap_split_ioend(struct iomap_ioend *ioend,
 		return ERR_CAST(split);
 	split->bi_private = bio->bi_private;
 	split->bi_end_io = bio->bi_end_io;
+#ifdef CONFIG_WB_TRACER
+	split->wb_tracer_traced = bio->wb_tracer_traced;
+#endif
 
 	split_ioend = iomap_init_ioend(ioend->io_inode, split, ioend->io_offset,
 			ioend->io_flags);

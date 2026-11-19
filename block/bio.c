@@ -256,6 +256,9 @@ void bio_init(struct bio *bio, struct block_device *bdev, struct bio_vec *table,
 	bio->bi_max_vecs = max_vecs;
 	bio->bi_io_vec = table;
 	bio->bi_pool = NULL;
+#ifdef CONFIG_WB_TRACER
+	bio->wb_tracer_traced = false;
+#endif
 }
 EXPORT_SYMBOL(bio_init);
 
@@ -283,6 +286,9 @@ void bio_reset(struct bio *bio, struct block_device *bdev, blk_opf_t opf)
 	if (bio->bi_bdev)
 		bio_associate_blkg(bio);
 	bio->bi_opf = opf;
+#ifdef CONFIG_WB_TRACER
+	bio->wb_tracer_traced = false;
+#endif
 }
 EXPORT_SYMBOL(bio_reset);
 
