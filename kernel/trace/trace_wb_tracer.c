@@ -8,3 +8,6 @@
 // Export tracepoint symbols for use in modules (e. g. XFS on Fedora)
 EXPORT_TRACEPOINT_SYMBOL_GPL(wb_tracer_sync_start);
 EXPORT_TRACEPOINT_SYMBOL_GPL(wb_tracer_sync_exit);
+EXPORT_TRACEPOINT_SYMBOL_GPL(wb_tracer_sync_bio_submit);
+EXPORT_TRACEPOINT_SYMBOL_GPL(wb_tracer_sync_bio_complete);
+EXPORT_TRACEPOINT_SYMBOL_GPL(wb_tracer_sync_bio_add_folio);
